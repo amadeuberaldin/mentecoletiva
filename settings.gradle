@@ -5,4 +5,4 @@ pluginManagement {
         mavenCentral()
     }
 }
-rootProject.name = "hivemind"
+rootProject.name = "mentecoletiva"
