@@ -1,6 +1,12 @@
 # MenteColetiva
 
-MenteColetiva is a server-side Fabric mod for Minecraft 1.21.11.
+MenteColetiva is a **Minecraft Fabric server-side mod** that makes hostile mobs behave like a swarm.
+
+When one hostile mob detects or is attacked by a player, nearby mobs join the attack.
+
+This creates coordinated mob behavior and makes combat more dangerous and dynamic.
+
+Compatible with **Minecraft 1.21.11**.
 
 ## Description
 
@@ -32,4 +38,10 @@ Server-side only.
 
 ## Author
 
-Amadeu
+Amadeu Beraldin
+
+## Download
+
+Download the latest release here:
+
+https://github.com/amadeuberaldin/mentecoletiva/releases
