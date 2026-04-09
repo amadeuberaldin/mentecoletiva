@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "mentecoletiva",
+  "version": "${version}",
+  "name": "MenteColetiva",
+  "description": "The way Minecraft should be.",
+  "authors": ["Amadeu"],
+  "license": "MIT",
+  "environment": "server",
+
+  "entrypoints": {
+    "main": ["br.com.amadeu.mentecoletiva.HiveMindMod"]
+  },
+
+  "mixins": [
+    "mentecoletiva.mixins.json"
+  ],
+
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "1.21.11",
+    "fabric-api": "*"
+  }
+}
