@@ -1,13 +1,13 @@
 plugins {
-    id "fabric-loom" version "1.14.10"
-    id "maven-publish"
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    id 'maven-publish'
 }
 
-version = "1.0.0"
-group = "br.com.amadeu"
+version = project.mod_version
+group = project.maven_group
 
 base {
-    archivesName = "mentecoletiva"
+    archivesName = project.archives_base_name
 }
 
 repositories {
@@ -16,32 +16,31 @@ repositories {
 }
 
 dependencies {
-    minecraft "com.mojang:minecraft:1.21.11"
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
 
-    // Yarn mappings (combina com seus imports net.minecraft.entity.*)
-    mappings "net.fabricmc:yarn:1.21.11+build.1:v2"
-
-    modImplementation "net.fabricmc:fabric-loader:0.18.4"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:0.141.3+1.21.11"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 }
 
 java {
-    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
 }
 
 loom {
     mixin {
-        useLegacyMixinAp = true
         defaultRefmapName = "hivemind-refmap.json"
     }
 }
 
 tasks.withType(JavaCompile).configureEach {
-    options.release = 21
+    options.release = 25
 }
 
 processResources {
     inputs.property "version", project.version
+
     filesMatching("fabric.mod.json") {
         expand "version": project.version
     }

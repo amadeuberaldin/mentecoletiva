@@ -1,11 +1,11 @@
 package br.com.amadeu.mentecoletiva.mixin;
 
 import br.com.amadeu.mentecoletiva.SwarmRoleFlag;
-import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.world.entity.Mob;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 
-@Mixin(MobEntity.class)
+@Mixin(Mob.class)
 public abstract class SwarmRoleFlagMixin implements SwarmRoleFlag {
 
     @Unique private int mentecoletiva_role = 0;
