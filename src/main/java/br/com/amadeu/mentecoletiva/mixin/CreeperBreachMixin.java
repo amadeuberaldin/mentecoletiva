@@ -1,15 +1,15 @@
 package br.com.amadeu.mentecoletiva.mixin;
 
 import br.com.amadeu.mentecoletiva.mixin.accessor.EntityCollisionAccessor;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.mob.CreeperEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.monster.Creeper;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.UUID;
 
-@Mixin(CreeperEntity.class)
+@Mixin(Creeper.class)
 public abstract class CreeperBreachMixin {
 
     // ===== Ajustes =====
@@ -45,27 +45,27 @@ public abstract class CreeperBreachMixin {
 
     @Inject(method = "tick", at = @At("TAIL"))
     private void hivemind_tick(CallbackInfo ci) {
-        CreeperEntity creeper = (CreeperEntity)(Object)this;
-        World world = creeper.getEntityWorld();
-        if (world.isClient()) return;
-        if (!(world instanceof ServerWorld serverWorld)) return;
+        Creeper creeper = (Creeper)(Object)this;
+        Level world = creeper.level();
+        if (world.isClientSide()) return;
+        if (!(world instanceof ServerLevel serverWorld)) return;
 
         if (hivemind_cooldown > 0) hivemind_cooldown--;
         if (hivemind_memoryTicks > 0) hivemind_memoryTicks--;
 
         // Atualiza memória se atualmente está mirando um player
         LivingEntity currentTarget = creeper.getTarget();
-        if (currentTarget instanceof PlayerEntity p) {
-            hivemind_memoryTarget = p.getUuid();
+        if (currentTarget instanceof Player p) {
+            hivemind_memoryTarget = p.getUUID();
             hivemind_memoryTicks = MEMORY_TICKS;
         }
 
         // Resolve player: target atual OU memória
-        PlayerEntity player = null;
-        if (currentTarget instanceof PlayerEntity p) {
+        Player player = null;
+        if (currentTarget instanceof Player p) {
             player = p;
         } else if (hivemind_memoryTarget != null && hivemind_memoryTicks > 0) {
-            player = serverWorld.getPlayerByUuid(hivemind_memoryTarget);
+            player = serverWorld.getPlayerByUUID(hivemind_memoryTarget);
         }
 
         if (player == null) {
@@ -116,21 +116,21 @@ public abstract class CreeperBreachMixin {
     }
 
     @Unique
-    private static boolean hivemind_isRealWallAhead(ServerWorld world, CreeperEntity creeper) {
+    private static boolean hivemind_isRealWallAhead(ServerLevel world, Creeper creeper) {
         // Direção horizontal aproximada do olhar do creeper
-        Vec3d look = creeper.getRotationVec(1.0F);
-        Direction dir = Direction.getFacing(look.x, 0.0, look.z);
+        Vec3 look = creeper.getLookAngle();
+        Direction dir = Direction.getApproximateNearest(look.x, 0.0, look.z);
         if (dir == Direction.UP || dir == Direction.DOWN) return false;
 
         // Posição “na frente” ao nível do corpo (pé) e da cabeça
-        Vec3d front = new Vec3d(
-                creeper.getX() + dir.getOffsetX() * FRONT_DISTANCE,
+        Vec3 front = new Vec3(
+                creeper.getX() + dir.getStepX() * FRONT_DISTANCE,
                 creeper.getY(),
-                creeper.getZ() + dir.getOffsetZ() * FRONT_DISTANCE
+                creeper.getZ() + dir.getStepZ() * FRONT_DISTANCE
         );
 
-        BlockPos footPos = BlockPos.ofFloored(front.x, creeper.getY() + 0.1, front.z);
-        BlockPos headPos = footPos.up(); // bloco acima
+        BlockPos footPos = BlockPos.containing(front.x, creeper.getY() + 0.1, front.z);
+        BlockPos headPos = footPos.above(); // bloco acima
 
         BlockState foot = world.getBlockState(footPos);
         BlockState head = world.getBlockState(headPos);

@@ -2,49 +2,49 @@ package br.com.amadeu.mentecoletiva;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.mob.AbstractSkeletonEntity;
-import net.minecraft.entity.mob.BlazeEntity;
-import net.minecraft.entity.mob.BoggedEntity;
-import net.minecraft.entity.mob.CaveSpiderEntity;
-import net.minecraft.entity.mob.CreeperEntity;
-import net.minecraft.entity.mob.ElderGuardianEntity;
-import net.minecraft.entity.mob.EndermanEntity;
-import net.minecraft.entity.mob.EndermiteEntity;
-import net.minecraft.entity.mob.EvokerEntity;
-import net.minecraft.entity.mob.GhastEntity;
-import net.minecraft.entity.mob.GuardianEntity;
-import net.minecraft.entity.mob.HoglinEntity;
-import net.minecraft.entity.mob.HostileEntity;
-import net.minecraft.entity.mob.MagmaCubeEntity;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.mob.PhantomEntity;
-import net.minecraft.entity.mob.PiglinBruteEntity;
-import net.minecraft.entity.mob.PiglinEntity;
-import net.minecraft.entity.mob.PillagerEntity;
-import net.minecraft.entity.mob.RavagerEntity;
-import net.minecraft.entity.mob.ShulkerEntity;
-import net.minecraft.entity.mob.SilverfishEntity;
-import net.minecraft.entity.mob.SkeletonEntity;
-import net.minecraft.entity.mob.SlimeEntity;
-import net.minecraft.entity.mob.SpiderEntity;
-import net.minecraft.entity.mob.StrayEntity;
-import net.minecraft.entity.mob.VexEntity;
-import net.minecraft.entity.mob.VindicatorEntity;
-import net.minecraft.entity.mob.WardenEntity;
-import net.minecraft.entity.mob.WitchEntity;
-import net.minecraft.entity.mob.ZoglinEntity;
-import net.minecraft.entity.mob.ZombifiedPiglinEntity;
-import net.minecraft.entity.boss.WitherEntity;
-import net.minecraft.entity.boss.dragon.EnderDragonEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.World;
-import net.minecraft.entity.mob.WitherSkeletonEntity;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.monster.skeleton.AbstractSkeleton;
+import net.minecraft.world.entity.monster.Blaze;
+import net.minecraft.world.entity.monster.Creeper;
+import net.minecraft.world.entity.monster.ElderGuardian;
+import net.minecraft.world.entity.monster.EnderMan;
+import net.minecraft.world.entity.monster.Endermite;
+import net.minecraft.world.entity.monster.Ghast;
+import net.minecraft.world.entity.monster.Guardian;
+import net.minecraft.world.entity.monster.Enemy;
+import net.minecraft.world.entity.monster.MagmaCube;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.monster.Phantom;
+import net.minecraft.world.entity.monster.piglin.PiglinBrute;
+import net.minecraft.world.entity.monster.piglin.Piglin;
+import net.minecraft.world.entity.monster.Ravager;
+import net.minecraft.world.entity.monster.Shulker;
+import net.minecraft.world.entity.monster.Silverfish;
+import net.minecraft.world.entity.monster.skeleton.Skeleton;
+import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.skeleton.Stray;
+import net.minecraft.world.entity.monster.Vex;
+import net.minecraft.world.entity.monster.Witch;
+import net.minecraft.world.entity.monster.Zoglin;
+import net.minecraft.world.entity.monster.skeleton.Bogged;
+import net.minecraft.world.entity.monster.spider.Spider;
+import net.minecraft.world.entity.monster.spider.CaveSpider;
+import net.minecraft.world.entity.monster.hoglin.Hoglin;
+import net.minecraft.world.entity.monster.warden.Warden;
+import net.minecraft.world.entity.monster.zombie.ZombifiedPiglin;
+import net.minecraft.world.entity.monster.illager.Pillager;
+import net.minecraft.world.entity.monster.illager.Vindicator;
+import net.minecraft.world.entity.monster.illager.Evoker;
+import net.minecraft.world.entity.boss.wither.WitherBoss;
+import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.entity.monster.skeleton.WitherSkeleton;
 
 public class HiveMindMod implements ModInitializer {
 
@@ -68,58 +68,58 @@ public class HiveMindMod implements ModInitializer {
         // =========================
         // Overworld hostis clássicos
         // =========================
-        entity instanceof SkeletonEntity
-                || entity instanceof StrayEntity
-                || entity instanceof BoggedEntity
-                || entity instanceof CreeperEntity
-                || entity instanceof SpiderEntity
-                || entity instanceof CaveSpiderEntity
-                || entity instanceof EndermanEntity
-                || entity instanceof WitchEntity
-                || entity instanceof PhantomEntity
-                || entity instanceof SilverfishEntity
-                || entity instanceof EndermiteEntity
+        entity instanceof Skeleton
+                || entity instanceof Stray
+                || entity instanceof Bogged
+                || entity instanceof Creeper
+                || entity instanceof Spider
+                || entity instanceof CaveSpider
+                || entity instanceof EnderMan
+                || entity instanceof Witch
+                || entity instanceof Phantom
+                || entity instanceof Silverfish
+                || entity instanceof Endermite
 
                 // =========================
                 // Slimes
                 // =========================
-                || entity instanceof SlimeEntity
-                || entity instanceof MagmaCubeEntity
+                || entity instanceof Slime
+                || entity instanceof MagmaCube
 
                 // =========================
                 // Ocean mobs hostis
                 // =========================
-                || entity instanceof GuardianEntity
-                || entity instanceof ElderGuardianEntity
+                || entity instanceof Guardian
+                || entity instanceof ElderGuardian
 
                 // =========================
                 // Illagers / raid
                 // =========================
-                || entity instanceof PillagerEntity
-                || entity instanceof VindicatorEntity
-                || entity instanceof EvokerEntity
-                || entity instanceof VexEntity
-                || entity instanceof RavagerEntity
+                || entity instanceof Pillager
+                || entity instanceof Vindicator
+                || entity instanceof Evoker
+                || entity instanceof Vex
+                || entity instanceof Ravager
 
                 // =========================
                 // Nether hostis
                 // =========================
-                || entity instanceof BlazeEntity
-                || entity instanceof GhastEntity
-                || entity instanceof HoglinEntity
-                || entity instanceof ZoglinEntity
-                || entity instanceof PiglinEntity
-                || entity instanceof PiglinBruteEntity
-                || entity instanceof ZombifiedPiglinEntity
-                || entity instanceof WitherSkeletonEntity
+                || entity instanceof Blaze
+                || entity instanceof Ghast
+                || entity instanceof Hoglin
+                || entity instanceof Zoglin
+                || entity instanceof Piglin
+                || entity instanceof PiglinBrute
+                || entity instanceof ZombifiedPiglin
+                || entity instanceof WitherSkeleton
 
                 // =========================
                 // End / especiais / bosses
                 // =========================
-                || entity instanceof ShulkerEntity
-                || entity instanceof WardenEntity
-                || entity instanceof WitherEntity
-                || entity instanceof EnderDragonEntity;
+                || entity instanceof Shulker
+                || entity instanceof Warden
+                || entity instanceof WitherBoss
+                || entity instanceof EnderDragon;
     }
 
     @Override
@@ -127,15 +127,15 @@ public class HiveMindMod implements ModInitializer {
         ServerLivingEntityEvents.ALLOW_DAMAGE.register(
                 (LivingEntity entity, DamageSource source, float amount) -> {
 
-                    World w = entity.getEntityWorld();
-                    if (!(w instanceof ServerWorld world))
+                    Level w = entity.level();
+                    if (!(w instanceof ServerLevel world))
                         return true;
 
-                    Entity attackerEntity = source.getAttacker();
-                    if (!(attackerEntity instanceof PlayerEntity player))
+                    Entity attackerEntity = source.getEntity();
+                    if (!(attackerEntity instanceof Player player))
                         return true;
 
-                    if (!(entity instanceof HostileEntity))
+                    if (!(entity instanceof Enemy))
                         return true;
                     if (hivemind_isExcluded(entity))
                         return true;
@@ -148,8 +148,8 @@ public class HiveMindMod implements ModInitializer {
         ServerLivingEntityEvents.AFTER_DEATH.register(
                 (LivingEntity entity, DamageSource source) -> {
 
-                    World w = entity.getEntityWorld();
-                    if (!(w instanceof ServerWorld world))
+                    Level w = entity.level();
+                    if (!(w instanceof ServerLevel world))
                         return;
 
                     if (!(entity instanceof HiveMindFlag flag))
@@ -158,21 +158,21 @@ public class HiveMindMod implements ModInitializer {
                     if (flag.hivemind_getActiveTicks() <= 0)
                         return;
 
-                    if (world.random.nextFloat() < 0.33f) {
-                        entity.dropStack(world, new ItemStack(Items.EMERALD));
+                    if (world.getRandom().nextFloat() < 0.33f) {
+                        world.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(world, entity.getX(), entity.getY(), entity.getZ(), new ItemStack(Items.EMERALD)));
                     }
                 });
     }
 
-    public static void hivemind_assignRole(MobEntity mob) {
+    public static void hivemind_assignRole(Mob mob) {
         if (!(mob instanceof SwarmRoleFlag roleFlag))
             return;
 
         int role = ROLE_DEFAULT;
 
-        if (mob instanceof AbstractSkeletonEntity) {
+        if (mob instanceof AbstractSkeleton) {
             role = ROLE_BACKLINE;
-        } else if (mob instanceof CreeperEntity) {
+        } else if (mob instanceof Creeper) {
             role = ROLE_BREACHER;
         } else {
             if (mob.getRandom().nextInt(4) == 0) {
@@ -183,7 +183,7 @@ public class HiveMindMod implements ModInitializer {
         roleFlag.mentecoletiva_setRole(role);
     }
 
-    public static void hivemind_callNearby(ServerWorld world, LivingEntity center, PlayerEntity player) {
+    public static void hivemind_callNearby(ServerLevel world, LivingEntity center, Player player) {
         HIVEMIND_PROPAGATING.set(true);
         try {
             if (center instanceof HiveMindFlag flagCenter) {
@@ -192,14 +192,14 @@ public class HiveMindMod implements ModInitializer {
 
             int joined = 0;
 
-            for (MobEntity mob : world.getEntitiesByClass(
-                    MobEntity.class,
-                    center.getBoundingBox().expand(RADIUS),
-                    m -> (m instanceof HostileEntity)
+            for (Mob mob : world.getEntitiesOfClass(
+                    Mob.class,
+                    center.getBoundingBox().inflate(RADIUS),
+                    m -> (m instanceof Enemy)
                             && !hivemind_isExcluded(m)
                             && m.isAlive()
                             && m != center)) {
-                if (mob.isAiDisabled())
+                if (mob.isNoAi())
                     continue;
 
                 mob.setTarget(player);
