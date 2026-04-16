@@ -28,21 +28,20 @@ java {
     }
 }
 
-loom {
-    mixin {
-        defaultRefmapName = "hivemind-refmap.json"
-    }
-}
-
 tasks.withType(JavaCompile).configureEach {
     options.release = 25
 }
 
+version = project.mod_version
+group = project.maven_group
+
+def modVersion = version.toString()
+
 processResources {
-    inputs.property "version", project.version
+    inputs.property "version", modVersion
 
     filesMatching("fabric.mod.json") {
-        expand "version": project.version
+        expand "version": modVersion
     }
 }
 
