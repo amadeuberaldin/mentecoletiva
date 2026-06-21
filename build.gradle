@@ -44,9 +44,3 @@ processResources {
         expand "version": modVersion
     }
 }
-
-tasks.named("jar", Jar) {
-    from("build/resources/main") {
-        include "hivemind-refmap.json"
-    }
-}

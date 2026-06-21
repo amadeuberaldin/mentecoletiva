@@ -22,22 +22,37 @@ public abstract class MobSetTargetMixin {
 
     @Inject(method = "setTarget", at = @At("HEAD"))
     private void hivemind_onSetTarget(LivingEntity target, CallbackInfo ci) {
-        Mob self = (Mob)(Object)this;
+        Mob self = (Mob) (Object) this;
 
-        if (HiveMindMod.hivemind_isPropagating()) return;
+        if (HiveMindMod.hivemind_isPropagating())
+            return;
 
         Level w = self.level();
-        if (!(w instanceof ServerLevel world)) return;
+        if (!(w instanceof ServerLevel world))
+            return;
 
-        if (!(self instanceof Monster)) return;
-        if (self instanceof EnderMan) return;
-        if (self instanceof ZombifiedPiglin) return;
-        if (self instanceof Warden) return;
-        if (self instanceof WitherBoss) return;
+        if (!(self instanceof Monster))
+            return;
+        if (self instanceof EnderMan)
+            return;
+        if (self instanceof ZombifiedPiglin)
+            return;
+        if (self instanceof Warden)
+            return;
+        if (self instanceof WitherBoss)
+            return;
 
-        if (!(target instanceof Player player)) return;
+        if (!(target instanceof Player player))
+            return;
+        // 🔒 impede propagação fora da janela ativa
+        if (self.getTarget() == target)
+            return;
 
-        if (self.getTarget() == target) return;
+        if (!HiveMindMod.hivemind_canJoinForPlayer(self, player))
+            return;
+
+        if (!HiveMindMod.hivemind_tryActivateForPlayer(world, player))
+            return;
 
         if (self instanceof HiveMindFlag flag) {
             flag.hivemind_setActiveTicks(200);

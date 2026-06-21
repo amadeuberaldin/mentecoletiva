@@ -8,6 +8,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.animal.equine.SkeletonHorse;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -19,12 +20,12 @@ import net.minecraft.world.entity.monster.Endermite;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.monster.Ghast;
 import net.minecraft.world.entity.monster.Guardian;
-import net.minecraft.world.entity.monster.MagmaCube;
+import net.minecraft.world.entity.monster.cubemob.MagmaCube;
 import net.minecraft.world.entity.monster.Phantom;
 import net.minecraft.world.entity.monster.Ravager;
 import net.minecraft.world.entity.monster.Shulker;
 import net.minecraft.world.entity.monster.Silverfish;
-import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.entity.monster.Vex;
 import net.minecraft.world.entity.monster.Witch;
 import net.minecraft.world.entity.monster.Zoglin;
@@ -47,6 +48,21 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.server.level.ServerPlayer;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.entity.EntitySpawnReason;
 
 public class HiveMindMod implements ModInitializer {
 
@@ -57,19 +73,258 @@ public class HiveMindMod implements ModInitializer {
 
     private static final ThreadLocal<Boolean> HIVEMIND_PROPAGATING = ThreadLocal.withInitial(() -> false);
 
+    /*
+     * Guarda o tick em que a janela ativa começou para cada jogador.
+     *
+     * A partir desse tick calculamos:
+     * - os 2 minutos de atividade
+     * - os 40 minutos de cooldown
+     *
+     * Comunicação:
+     * - usado por hivemind_isPlayerActive
+     * - usado por hivemind_isPlayerOnCooldown
+     * - usado por hivemind_tryActivateForPlayer
+     */
+    private static final Map<UUID, Long> ACTIVE_START_TICK = new ConcurrentHashMap<>();
+
+    /*
+     * 2 minutos de janela ativa.
+     */
+    private static final long ACTIVE_DURATION_TICKS = 5L * 60L * 20L;
+
+    /*
+     * 40 minutos de cooldown.
+     */
+    private static final long COOLDOWN_DURATION_TICKS = 30L * 60L * 20L;
+
+    /*
+     * Duração total do ciclo:
+     * - 2 min ativos
+     * - 40 min de cooldown
+     */
+    private static final long TOTAL_CYCLE_TICKS = ACTIVE_DURATION_TICKS + COOLDOWN_DURATION_TICKS;
+
     public static boolean hivemind_isPropagating() {
         return HIVEMIND_PROPAGATING.get();
+    }
+
+    /*
+     * Retorna o tick atual do mundo.
+     *
+     * Comunicação:
+     * - usado pelas rotinas de tempo do player
+     */
+    private static long hivemind_now(ServerLevel world) {
+        return world.getGameTime();
+    }
+
+    private static void hivemind_registerCommands() {
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+            dispatcher.register(
+                    Commands.literal("hivemind")
+                            .executes(context -> {
+                                context.getSource().sendSuccess(
+                                        () -> Component.literal("§5[HiveMind] §7Evento está: "
+                                                + (HIVEMIND_EVENT_ENABLED ? "§aLIGADO" : "§cDESLIGADO")),
+                                        false);
+                                return 1;
+                            })
+                            .then(Commands.literal("on")
+                                    .requires(HiveMindMod::hivemind_isOp)
+                                    .executes(context -> {
+                                        HIVEMIND_EVENT_ENABLED = true;
+                                        context.getSource().sendSuccess(
+                                                () -> Component.literal("§5[HiveMind] §aEvento ligado."),
+                                                true);
+                                        return 1;
+                                    }))
+                            .then(Commands.literal("off")
+                                    .requires(HiveMindMod::hivemind_isOp)
+                                    .executes(context -> {
+                                        HIVEMIND_EVENT_ENABLED = false;
+                                        ACTIVE_START_TICK.clear();
+                                        context.getSource().sendSuccess(
+                                                () -> Component.literal("§5[HiveMind] §cEvento desligado."),
+                                                true);
+                                        return 1;
+                                    })));
+        });
+    }
+
+    private static boolean hivemind_isOp(CommandSourceStack source) {
+
+        if (source.getPlayer() instanceof ServerPlayer player) {
+
+            return source.getServer()
+                    .getPlayerList()
+                    .isOp(new NameAndId(player.getGameProfile()));
+        }
+
+        return true;
+    }
+
+    /*
+     * Retorna quantos ticks ainda restam na janela ativa do Hivemind.
+     *
+     * Comunicação:
+     * - usado pelo contador do action bar
+     */
+    private static long hivemind_getRemainingActiveTicks(ServerLevel world, Player player) {
+        Long startTick = ACTIVE_START_TICK.get(player.getUUID());
+        if (startTick == null) {
+            return 0L;
+        }
+
+        long elapsed = hivemind_now(world) - startTick;
+        long remaining = ACTIVE_DURATION_TICKS - elapsed;
+        return Math.max(0L, remaining);
+    }
+
+    private static final String WORLD_Z_ID = "mundoz:world_z";
+    private static boolean HIVEMIND_EVENT_ENABLED = false;
+
+    private static boolean hivemind_isWorldZ(Level level) {
+        return level.dimension().identifier().toString().equals(WORLD_Z_ID);
+    }
+
+    /*
+     * Formata ticks em mm:ss.
+     *
+     * Comunicação:
+     * - usado para o texto do action bar
+     */
+    private static String hivemind_formatTicksAsMinutesSeconds(long ticks) {
+        long totalSeconds = ticks / 20L;
+        long minutes = totalSeconds / 60L;
+        long seconds = totalSeconds % 60L;
+        return String.format("%d:%02d", minutes, seconds);
+    }
+
+    /*
+     * Envia o contador do Hivemind no action bar.
+     *
+     * Comunicação:
+     * - chamado no tick do servidor enquanto a janela ativa existir
+     */
+    private static void hivemind_sendActionBar(ServerLevel world, ServerPlayer player) {
+        long remainingTicks = hivemind_getRemainingActiveTicks(world, player);
+        if (remainingTicks <= 0L) {
+            return;
+        }
+
+        String timeText = hivemind_formatTicksAsMinutesSeconds(remainingTicks);
+
+        player.sendSystemMessage(
+                Component.literal("Sobreviva: " + timeText).withStyle(ChatFormatting.DARK_RED),
+                true);
+    }
+
+    /*
+     * Verifica se o jogador está dentro da janela ativa de 2 minutos.
+     *
+     * Comunicação:
+     * - usado por hivemind_tryActivateForPlayer
+     */
+    public static boolean hivemind_isPlayerActive(ServerLevel world, Player player) {
+        Long startTick = ACTIVE_START_TICK.get(player.getUUID());
+        if (startTick == null) {
+            return false;
+        }
+
+        long elapsed = hivemind_now(world) - startTick;
+        return elapsed >= 0 && elapsed < ACTIVE_DURATION_TICKS;
+    }
+
+    /*
+     * Verifica se o jogador está no cooldown.
+     *
+     * Regras:
+     * - o cooldown começa imediatamente quando os 2 min acabam
+     * - e dura até completar 42 min desde o início da ativação
+     *
+     * Comunicação:
+     * - usado por hivemind_tryActivateForPlayer
+     */
+    public static boolean hivemind_isPlayerOnCooldown(ServerLevel world, Player player) {
+        Long startTick = ACTIVE_START_TICK.get(player.getUUID());
+        if (startTick == null) {
+            return false;
+        }
+
+        long elapsed = hivemind_now(world) - startTick;
+        return elapsed >= ACTIVE_DURATION_TICKS && elapsed < TOTAL_CYCLE_TICKS;
+    }
+
+    /*
+     * Limpa registros antigos quando o ciclo completo já terminou.
+     *
+     * Comunicação:
+     * - usado por hivemind_tryActivateForPlayer
+     */
+    private static void hivemind_cleanupExpiredCycle(ServerLevel world, Player player) {
+        UUID playerId = player.getUUID();
+        Long startTick = ACTIVE_START_TICK.get(playerId);
+        if (startTick == null) {
+            return;
+        }
+
+        long elapsed = hivemind_now(world) - startTick;
+        if (elapsed >= TOTAL_CYCLE_TICKS) {
+            ACTIVE_START_TICK.remove(playerId);
+        }
+    }
+
+    /*
+     * Tenta ativar ou continuar o hivemind para este jogador.
+     *
+     * Regras:
+     * - se estiver ativo, continua normalmente
+     * - se estiver em cooldown, bloqueia
+     * - se o ciclo terminou, limpa e permite nova ativação
+     * - se nunca ativou, inicia agora
+     *
+     * Comunicação:
+     * - chamada no evento de dano antes de chamar hivemind_callNearby
+     */
+    public static boolean hivemind_tryActivateForPlayer(ServerLevel world, Player player) {
+        if (hivemind_isWorldZ(world)) {
+            return true;
+        }
+
+        if (!HIVEMIND_EVENT_ENABLED) {
+            return false;
+        }
+
+        hivemind_cleanupExpiredCycle(world, player);
+
+        if (hivemind_isPlayerActive(world, player)) {
+            return true;
+        }
+
+        if (hivemind_isPlayerOnCooldown(world, player)) {
+            return false;
+        }
+
+        ACTIVE_START_TICK.put(player.getUUID(), hivemind_now(world));
+
+        world.playSound(
+                null,
+                player.blockPosition(),
+                SoundEvents.RAID_HORN.value(),
+                SoundSource.HOSTILE,
+                1.0f,
+                1.0f);
+
+        return true;
     }
 
     // Esta função define mobs que ficam sempre fora do hivemind.
     // Comunicação:
     // - usada por hivemind_canJoinForPlayer
     // - NÃO exclui skeleton, stray, bogged, creeper, witch e wither skeleton,
-    //   pois esses agora dependem da progressão do player
+    // pois esses agora dependem da progressão do player
     private static boolean hivemind_isAlwaysExcluded(LivingEntity entity) {
-        return
-                entity instanceof Spider
-                || entity instanceof CaveSpider
+        return entity instanceof CaveSpider
                 || entity instanceof EnderMan
                 || entity instanceof Phantom
                 || entity instanceof Silverfish
@@ -134,10 +389,14 @@ public class HiveMindMod implements ModInitializer {
     private static int hivemind_countIronArmor(Player player) {
         int count = 0;
 
-        if (player.getItemBySlot(EquipmentSlot.HEAD).is(Items.IRON_HELMET)) count++;
-        if (player.getItemBySlot(EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE)) count++;
-        if (player.getItemBySlot(EquipmentSlot.LEGS).is(Items.IRON_LEGGINGS)) count++;
-        if (player.getItemBySlot(EquipmentSlot.FEET).is(Items.IRON_BOOTS)) count++;
+        if (player.getItemBySlot(EquipmentSlot.HEAD).is(Items.IRON_HELMET))
+            count++;
+        if (player.getItemBySlot(EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE))
+            count++;
+        if (player.getItemBySlot(EquipmentSlot.LEGS).is(Items.IRON_LEGGINGS))
+            count++;
+        if (player.getItemBySlot(EquipmentSlot.FEET).is(Items.IRON_BOOTS))
+            count++;
 
         return count;
     }
@@ -145,10 +404,14 @@ public class HiveMindMod implements ModInitializer {
     private static int hivemind_countDiamondArmor(Player player) {
         int count = 0;
 
-        if (player.getItemBySlot(EquipmentSlot.HEAD).is(Items.DIAMOND_HELMET)) count++;
-        if (player.getItemBySlot(EquipmentSlot.CHEST).is(Items.DIAMOND_CHESTPLATE)) count++;
-        if (player.getItemBySlot(EquipmentSlot.LEGS).is(Items.DIAMOND_LEGGINGS)) count++;
-        if (player.getItemBySlot(EquipmentSlot.FEET).is(Items.DIAMOND_BOOTS)) count++;
+        if (player.getItemBySlot(EquipmentSlot.HEAD).is(Items.DIAMOND_HELMET))
+            count++;
+        if (player.getItemBySlot(EquipmentSlot.CHEST).is(Items.DIAMOND_CHESTPLATE))
+            count++;
+        if (player.getItemBySlot(EquipmentSlot.LEGS).is(Items.DIAMOND_LEGGINGS))
+            count++;
+        if (player.getItemBySlot(EquipmentSlot.FEET).is(Items.DIAMOND_BOOTS))
+            count++;
 
         return count;
     }
@@ -156,10 +419,14 @@ public class HiveMindMod implements ModInitializer {
     private static int hivemind_countNetheriteArmor(Player player) {
         int count = 0;
 
-        if (player.getItemBySlot(EquipmentSlot.HEAD).is(Items.NETHERITE_HELMET)) count++;
-        if (player.getItemBySlot(EquipmentSlot.CHEST).is(Items.NETHERITE_CHESTPLATE)) count++;
-        if (player.getItemBySlot(EquipmentSlot.LEGS).is(Items.NETHERITE_LEGGINGS)) count++;
-        if (player.getItemBySlot(EquipmentSlot.FEET).is(Items.NETHERITE_BOOTS)) count++;
+        if (player.getItemBySlot(EquipmentSlot.HEAD).is(Items.NETHERITE_HELMET))
+            count++;
+        if (player.getItemBySlot(EquipmentSlot.CHEST).is(Items.NETHERITE_CHESTPLATE))
+            count++;
+        if (player.getItemBySlot(EquipmentSlot.LEGS).is(Items.NETHERITE_LEGGINGS))
+            count++;
+        if (player.getItemBySlot(EquipmentSlot.FEET).is(Items.NETHERITE_BOOTS))
+            count++;
 
         return count;
     }
@@ -173,6 +440,9 @@ public class HiveMindMod implements ModInitializer {
     // Comunicação:
     // - usada por hivemind_callNearby
     private static double hivemind_getDynamicRadius(Player player) {
+        if (hivemind_isWorldZ(player.level())) {
+            return 128.0;
+        }
         int ironCount = hivemind_countIronArmor(player);
         int diamondCount = hivemind_countDiamondArmor(player);
         int netheriteCount = hivemind_countNetheriteArmor(player);
@@ -189,7 +459,7 @@ public class HiveMindMod implements ModInitializer {
             return 48.0;
         }
 
-        return 16.0;
+        return 32.0;
     }
 
     // Esta função define o maxJoin dinâmico por progressão de armadura.
@@ -201,6 +471,9 @@ public class HiveMindMod implements ModInitializer {
     // Comunicação:
     // - usada por hivemind_callNearby
     private static int hivemind_getDynamicMaxJoin(Player player) {
+        if (hivemind_isWorldZ(player.level())) {
+            return 80;
+        }
         int ironCount = hivemind_countIronArmor(player);
         int diamondCount = hivemind_countDiamondArmor(player);
         int netheriteCount = hivemind_countNetheriteArmor(player);
@@ -223,14 +496,24 @@ public class HiveMindMod implements ModInitializer {
     // Esta função define, por player, quais mobs podem entrar no hivemind.
     // Regras:
     // - base do mod: zumbis e variantes continuam
-    // - full diamante: libera skeleton, stray e bogged
+    // - full diamante: libera skeleton, stray, spider e bogged
     // - qualquer peça de netherite: mantém skeletons e libera creeper
     // - full netherite: libera witch e wither skeleton
     // Comunicação:
     // - usada tanto no gatilho inicial quanto na seleção dos mobs próximos
-    private static boolean hivemind_canJoinForPlayer(LivingEntity entity, Player player) {
+    public static boolean hivemind_canJoinForPlayer(LivingEntity entity, Player player) {
         if (!(entity instanceof Enemy)) {
             return false;
+        }
+
+        if (hivemind_isWorldZ(player.level())) {
+            if (entity instanceof WitherSkeleton) {
+                return false;
+            }
+
+            return !(entity instanceof Warden)
+                    && !(entity instanceof WitherBoss)
+                    && !(entity instanceof EnderDragon);
         }
 
         if (hivemind_isAlwaysExcluded(entity)) {
@@ -241,7 +524,8 @@ public class HiveMindMod implements ModInitializer {
         boolean anyNetherite = hivemind_hasAnyNetherite(player);
         boolean fullNetherite = hivemind_isFullNetherite(player);
 
-        if (entity instanceof Skeleton || entity instanceof Stray || entity instanceof Bogged || entity instanceof Spider) {
+        if (entity instanceof Skeleton || entity instanceof Stray || entity instanceof Bogged
+                || entity instanceof Spider) {
             return fullDiamond || anyNetherite;
         }
 
@@ -258,6 +542,7 @@ public class HiveMindMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        hivemind_registerCommands();
         // Este evento dispara o hivemind quando o player causa dano em um mob válido.
         // Comunicação:
         // - chama hivemind_canJoinForPlayer para validar o mob inicial
@@ -269,14 +554,29 @@ public class HiveMindMod implements ModInitializer {
                     if (!(w instanceof ServerLevel world))
                         return true;
 
+                    ServerPlayer player;
+                    LivingEntity triggerMob;
+
                     Entity attackerEntity = source.getEntity();
-                    if (!(attackerEntity instanceof Player player))
+
+                    if (attackerEntity instanceof ServerPlayer attackingPlayer) {
+                        player = attackingPlayer;
+                        triggerMob = entity;
+                    } else if (entity instanceof ServerPlayer damagedPlayer
+                            && attackerEntity instanceof LivingEntity attackingMob) {
+                        player = damagedPlayer;
+                        triggerMob = attackingMob;
+                    } else {
+                        return true;
+                    }
+
+                    if (!hivemind_canJoinForPlayer(triggerMob, player))
                         return true;
 
-                    if (!hivemind_canJoinForPlayer(entity, player))
+                    if (!hivemind_tryActivateForPlayer(world, player))
                         return true;
 
-                    hivemind_callNearby(world, entity, player);
+                    hivemind_callNearby(world, triggerMob, player);
 
                     return true;
                 });
@@ -304,11 +604,41 @@ public class HiveMindMod implements ModInitializer {
                                         entity.getX(),
                                         entity.getY(),
                                         entity.getZ(),
-                                        new ItemStack(Items.EMERALD)
-                                )
-                        );
+                                        new ItemStack(Items.EMERALD)));
                     }
                 });
+
+        /*
+         * Atualiza o contador do Hivemind no action bar.
+         *
+         * Regras:
+         * - roda no fim do tick do servidor
+         * - envia só 1 vez por segundo
+         * - mostra apenas para players que estão na janela ativa
+         */
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            long gameTime = server.overworld().getGameTime();
+
+            if (gameTime % 20L != 0L) {
+                return;
+            }
+
+            for (ServerLevel level : server.getAllLevels()) {
+                for (ServerPlayer player : level.players()) {
+                    if (hivemind_isWorldZ(level)) {
+                        hivemind_callNearby(level, player, player);
+                        hivemind_trySpawnHorseman(level, player);
+                        continue;
+                    }
+
+                    if (hivemind_isPlayerActive(level, player)) {
+                        hivemind_sendActionBar(level, player);
+                        hivemind_callNearby(level, player, player);
+                        hivemind_trySpawnHorseman(level, player);
+                    }
+                }
+            }
+        });
     }
 
     // Esta função define o papel tático do mob dentro do hivemind.
@@ -345,6 +675,10 @@ public class HiveMindMod implements ModInitializer {
     public static void hivemind_callNearby(ServerLevel world, LivingEntity center, Player player) {
         HIVEMIND_PROPAGATING.set(true);
         try {
+            if (center instanceof Mob centerMob) {
+                centerMob.setTarget(player);
+            }
+
             if (center instanceof HiveMindFlag flagCenter) {
                 flagCenter.hivemind_setActiveTicks(200);
             }
@@ -378,6 +712,98 @@ public class HiveMindMod implements ModInitializer {
             }
         } finally {
             HIVEMIND_PROPAGATING.set(false);
+        }
+    }
+
+    private static void hivemind_trySpawnHorseman(
+            ServerLevel level,
+            ServerPlayer player) {
+
+        if (!level.isThundering()) {
+            return;
+        }
+
+        /*
+         * MundoZ:
+         * spawn mais agressivo.
+         *
+         * Overworld/Nether:
+         * só durante evento HiveMind.
+         */
+        int chance = hivemind_isWorldZ(level)
+                ? 1200
+                : 6000;
+
+        if (level.getRandom().nextInt(chance) != 0)
+            return;
+
+        double angle = level.getRandom().nextDouble() * Math.PI * 2.0;
+        double distance = 24 + level.getRandom().nextInt(16);
+
+        int x = (int) (player.getX() + Math.cos(angle) * distance);
+        int z = (int) (player.getZ() + Math.sin(angle) * distance);
+
+        int y = level.getHeight(
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                x,
+                z);
+
+        BlockPos spawnPos = new BlockPos(x, y, z);
+
+        /*
+         * Evita spawn subterrâneo.
+         */
+        if (!level.canSeeSky(spawnPos)) {
+            return;
+        }
+
+        SkeletonHorse horse = net.minecraft.world.entity.EntityTypes.SKELETON_HORSE.spawn(
+                level,
+                spawnPos,
+                EntitySpawnReason.EVENT);
+
+        Skeleton skeleton = net.minecraft.world.entity.EntityTypes.SKELETON.spawn(
+                level,
+                spawnPos.above(),
+                EntitySpawnReason.EVENT);
+
+        if (horse == null || skeleton == null) {
+            return;
+        }
+
+        /*
+         * Equipamento.
+         */
+        skeleton.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BOW));
+
+        skeleton.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD,
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_HELMET));
+
+        /*
+         * Passageiro.
+         */
+        skeleton.startRiding(horse);
+
+        level.addFreshEntity(horse);
+        level.addFreshEntity(skeleton);
+
+        /*
+         * Já nasce agressivo.
+         */
+        horse.setTarget(player);
+        skeleton.setTarget(player);
+
+        /*
+         * Atmosfera.
+         */
+        var lightning = net.minecraft.world.entity.EntityTypes.LIGHTNING_BOLT.spawn(
+                level,
+                spawnPos,
+                EntitySpawnReason.EVENT);
+
+        if (lightning != null) {
+            level.addFreshEntity(lightning);
         }
     }
 }
